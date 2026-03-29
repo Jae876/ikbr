@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node'
-import { getPool } from '../lib/db'
+import { Pool } from 'pg'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -15,8 +15,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
+  let pool: Pool | null = null
+
   try {
-    const pool = getPool()
+    // Check DATABASE_URL
+    if (!process.env.DATABASE_URL) {
+      return res.status(500).json({ 
+        error: 'DATABASE_URL not configured',
+        message: 'Set DATABASE_URL environment variable in Vercel'
+      })
+    }
+
+    // Create connection
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false }
+    })
+
+    // Test connection
+    const testResult = await pool.query('SELECT NOW()')
+    console.log('Database connected:', testResult.rows[0])
 
     // Create users table
     await pool.query(`
@@ -32,6 +50,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `)
+    console.log('✓ users table created')
 
     // Create accounts table
     await pool.query(`
@@ -47,6 +66,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `)
+    console.log('✓ accounts table created')
 
     // Create positions table
     await pool.query(`
@@ -63,6 +83,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `)
+    console.log('✓ positions table created')
 
     // Create transactions table
     await pool.query(`
@@ -77,6 +98,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `)
+    console.log('✓ transactions table created')
 
     // Create admin_users table
     await pool.query(`
@@ -90,16 +112,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `)
+    console.log('✓ admin_users table created')
+
+    await pool.end()
 
     return res.status(200).json({
       success: true,
-      message: 'Database tables initialized successfully'
+      message: 'All tables created successfully'
     })
   } catch (error) {
     console.error('Database init error:', error)
+    if (pool) {
+      try {
+        await pool.end()
+      } catch (e) {
+        console.error('Error closing pool:', e)
+      }
+    }
+    
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    
     return res.status(500).json({
-      error: 'Failed to initialize database',
-      message: error instanceof Error ? error.message : 'Unknown error'
+      error: 'Database initialization failed',
+      message: errorMessage,
+      hint: 'Check that DATABASE_URL is correct and Neon database is accessible'
     })
   }
 }
