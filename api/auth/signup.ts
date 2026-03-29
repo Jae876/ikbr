@@ -21,33 +21,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let pool: Pool | null = null
 
   try {
+    console.log('[SIGNUP] Request received')
+
     const { firstName, lastName, email, password } = req.body
 
     // Validation
     if (!firstName || !lastName || !email || !password) {
+      console.log('[SIGNUP] Missing fields:', { firstName, lastName, email, password: '***' })
       return res.status(400).json({ message: 'Missing required fields' })
     }
 
     if (!isValidEmail(email)) {
+      console.log('[SIGNUP] Invalid email:', email)
       return res.status(400).json({ message: 'Invalid email' })
     }
 
     if (!isValidPassword(password)) {
+      console.log('[SIGNUP] Invalid password format')
       return res.status(400).json({ message: 'Password too weak' })
     }
 
-    // Create connection
+    console.log('[SIGNUP] Validation passed for:', email)
+
+    // Check DATABASE_URL
     if (!process.env.DATABASE_URL) {
-      return res.status(500).json({ message: 'Database not configured' })
+      console.error('[SIGNUP] DATABASE_URL not set!')
+      return res.status(500).json({
+        message: 'Database not configured',
+        error: 'DATABASE_URL environment variable is missing'
+      })
     }
 
+    console.log('[SIGNUP] Creating database connection...')
+
+    // Create connection
     pool = new Pool({
       connectionString: process.env.DATABASE_URL,
       ssl: { rejectUnauthorized: false },
       max: 1,
-      idleTimeoutMillis: 5000,
-      connectionTimeoutMillis: 5000
+      idleTimeoutMillis: 10000,
+      connectionTimeoutMillis: 10000,
+      statement_timeout: 10000
     })
+
+    pool.on('error', (err) => {
+      console.error('[POOL ERROR]', err)
+    })
+
+    console.log('[SIGNUP] Creating users table...')
 
     // Create users table if doesn't exist
     await pool.query(`
@@ -60,6 +81,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `)
+
+    console.log('[SIGNUP] Creating accounts table...')
 
     // Create accounts table if doesn't exist
     await pool.query(`
@@ -74,15 +97,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       )
     `)
 
+    console.log('[SIGNUP] Tables ready, checking if email exists...')
+
     // Check if email exists
     const checkEmail = await pool.query('SELECT id FROM users WHERE email = $1', [email])
     if (checkEmail.rows.length > 0) {
+      console.log('[SIGNUP] Email already registered:', email)
       await pool.end()
       return res.status(409).json({ message: 'Email already registered' })
     }
 
+    console.log('[SIGNUP] Hashing password...')
+
     // Hash password
     const hashedPassword = await hashPassword(password)
+
+    console.log('[SIGNUP] Inserting user...')
 
     // Insert user
     const userRes = await pool.query(
@@ -91,6 +121,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     )
 
     const user = userRes.rows[0]
+    console.log('[SIGNUP] User created:', user.id)
+
+    console.log('[SIGNUP] Inserting account...')
 
     // Insert account
     const accountRes = await pool.query(
@@ -99,7 +132,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     )
 
     const account = accountRes.rows[0]
+    console.log('[SIGNUP] Account created:', account.id)
+
     const token = generateToken(user.id, user.email)
+
+    console.log('[SIGNUP] Success for:', email)
 
     await pool.end()
 
@@ -117,20 +154,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     })
   } catch (error) {
+    console.error('[SIGNUP ERROR]', error)
+
     if (pool) {
       try {
         await pool.end()
       } catch (e) {
-        // Ignore
+        console.error('[POOL END ERROR]', e)
       }
     }
 
-    console.error('Signup error:', error)
     const msg = error instanceof Error ? error.message : String(error)
+    const stack = error instanceof Error ? error.stack : ''
+
+    console.error('[SIGNUP STACK]', stack)
 
     return res.status(500).json({
       message: 'Signup failed',
-      error: msg
+      error: msg,
+      details: process.env.NODE_ENV === 'development' ? stack : undefined
     })
   }
 }

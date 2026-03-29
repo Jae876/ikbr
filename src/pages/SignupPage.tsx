@@ -102,12 +102,14 @@ export default function SignupPage() {
         data = await response.json()
       } else {
         const text = await response.text()
-        console.error('Non-JSON response:', text.substring(0, 200))
-        throw new Error(`Server error (${response.status}). Check console for details.`)
+        console.error('Non-JSON response:', text)
+        throw new Error(`Server returned error (${response.status}): ${text.substring(0, 500)}`)
       }
 
       if (!response.ok) {
-        throw new Error(data.message || 'Signup failed')
+        const errorMsg = data.error || data.message || 'Signup failed'
+        const details = data.details ? `\n\nDetails: ${data.details}` : ''
+        throw new Error(errorMsg + details)
       }
 
       setSuccess(true)
