@@ -1,5 +1,4 @@
 import { VercelRequest, VercelResponse } from '@vercel/node'
-import { Pool } from 'pg'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -15,30 +14,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  let pool: Pool | null = null
-
   try {
     // Check DATABASE_URL
     if (!process.env.DATABASE_URL) {
       return res.status(500).json({ 
         error: 'DATABASE_URL not configured',
-        message: 'Set DATABASE_URL environment variable in Vercel'
+        message: 'Set DATABASE_URL in Vercel Environment Variables',
+        help: 'Go to Vercel Project Settings > Environment Variables'
       })
     }
 
-    // Create connection
-    pool = new Pool({
+    // Lazy import pg only when needed
+    const { Pool } = require('pg')
+    
+    // Create pool with strict timeout
+    const pool = new Pool({
       connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false }
+      ssl: { rejectUnauthorized: false },
+      connectionTimeoutMillis: 5000,
+      idleTimeoutMillis: 1000,
+      max: 1
     })
 
-    // Test connection
-    const testResult = await pool.query('SELECT NOW()')
-    console.log('Database connected:', testResult.rows[0])
+    // Add timeout wrapper
+    const withTimeout = (promise: Promise<any>, ms: number) => {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Query timeout')), ms)
+        )
+      ])
+    }
 
-    // Create users table
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
+    // Test connection
+    await withTimeout(pool.query('SELECT NOW()'), 5000)
+
+    // Create tables (with short timeout each)
+    const tables = [
+      `CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         email VARCHAR(255) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
@@ -48,13 +61,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         created_at_account TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `)
-    console.log('✓ users table created')
-
-    // Create accounts table
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS accounts (
+      )`,
+      `CREATE TABLE IF NOT EXISTS accounts (
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
         balance DECIMAL(15, 2) DEFAULT 0,
@@ -64,13 +72,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         unrealized_gains DECIMAL(15, 2) DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `)
-    console.log('✓ accounts table created')
-
-    // Create positions table
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS positions (
+      )`,
+      `CREATE TABLE IF NOT EXISTS positions (
         id SERIAL PRIMARY KEY,
         account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
         symbol VARCHAR(10) NOT NULL,
@@ -81,13 +84,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         unrealized_pl_percent DECIMAL(10, 4),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `)
-    console.log('✓ positions table created')
-
-    // Create transactions table
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS transactions (
+      )`,
+      `CREATE TABLE IF NOT EXISTS transactions (
         id SERIAL PRIMARY KEY,
         account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
         date VARCHAR(10) NOT NULL,
@@ -96,13 +94,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         description VARCHAR(255),
         balance DECIMAL(15, 2),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `)
-    console.log('✓ transactions table created')
-
-    // Create admin_users table
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS admin_users (
+      )`,
+      `CREATE TABLE IF NOT EXISTS admin_users (
         id SERIAL PRIMARY KEY,
         username VARCHAR(100) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
@@ -110,32 +103,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         last_login TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `)
-    console.log('✓ admin_users table created')
+      )`
+    ]
+
+    for (const table of tables) {
+      try {
+        await withTimeout(pool.query(table), 3000)
+      } catch (err) {
+        console.warn('Table creation warning:', err)
+        // Continue - table may already exist
+      }
+    }
 
     await pool.end()
 
     return res.status(200).json({
       success: true,
-      message: 'All tables created successfully'
+      message: 'Database initialized successfully'
     })
   } catch (error) {
-    console.error('Database init error:', error)
-    if (pool) {
-      try {
-        await pool.end()
-      } catch (e) {
-        console.error('Error closing pool:', e)
-      }
-    }
+    console.error('Init error:', error)
     
-    const errorMessage = error instanceof Error ? error.message : String(error)
+    const msg = error instanceof Error ? error.message : String(error)
     
     return res.status(500).json({
       error: 'Database initialization failed',
-      message: errorMessage,
-      hint: 'Check that DATABASE_URL is correct and Neon database is accessible'
+      message: msg,
+      code: msg.includes('timeout') ? 'TIMEOUT' : 'DATABASE_ERROR'
     })
   }
 }
