@@ -220,6 +220,8 @@ export default function AdminPage() {
     try {
       setLoadingUsers(true)
       const token = localStorage.getItem('adminToken')
+      console.log('Seeding demo user with token:', token?.substring(0, 20) + '...')
+      
       const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/admin/seed-demo`, {
         method: 'POST',
         headers: {
@@ -228,14 +230,19 @@ export default function AdminPage() {
         }
       })
 
+      const data = await response.json()
+      console.log('Seed response:', data, 'Status:', response.status)
+
       if (response.ok) {
-        const data = await response.json()
         alert(`Demo user ${data.message === 'Demo user already exists' ? 'already exists' : 'created successfully'}!\nEmail: demo@example.com\nPassword: Demo123!@`)
+        await new Promise(resolve => setTimeout(resolve, 500)) // Brief delay to ensure DB write
         loadUsers()
+      } else {
+        alert(`Error: ${data.error || 'Failed to seed demo user'}\n${data.detail || ''}`)
       }
     } catch (err) {
       console.error('Error seeding demo user:', err)
-      alert('Failed to seed demo user')
+      alert(`Failed to seed demo user: ${(err as Error)?.message || 'Unknown error'}`)
     } finally {
       setLoadingUsers(false)
     }

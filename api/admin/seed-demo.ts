@@ -33,10 +33,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const authHeader = req.headers.authorization?.split(' ')[1]
+    console.log('Auth header received:', authHeader ? authHeader.substring(0, 20) + '...' : 'none')
+    console.log('Is admin:', authHeader ? isAdmin(authHeader) : false)
+    
     if (!authHeader || !isAdmin(authHeader)) {
+      console.log('Authorization failed')
       return res.status(401).json({ error: 'Unauthorized' })
     }
 
+    console.log('Checking for existing demo user...')
     // Check if demo user already exists
     const existingUser = await pool.query(
       'SELECT id FROM users WHERE email = $1',
@@ -44,12 +49,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     )
 
     if (existingUser.rows.length > 0) {
+      console.log('Demo user already exists with ID:', existingUser.rows[0].id)
       return res.status(200).json({
         message: 'Demo user already exists',
         userId: existingUser.rows[0].id
       })
     }
 
+    console.log('Creating new demo user...')
     // Create demo user
     const hashedPassword = await hashPassword('Demo123!@')
     const userResult = await pool.query(
@@ -60,6 +67,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     )
 
     const userId = userResult.rows[0].id
+    console.log('Demo user created with ID:', userId)
 
     // Create associated account with $2M balance and realistic data
     await pool.query(
@@ -68,6 +76,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       [userId, 2000000, 4000000, 0.5, 500000, 1500000]
     )
 
+    console.log('Demo account created successfully')
     return res.status(201).json({
       message: 'Demo user created successfully',
       userId,
