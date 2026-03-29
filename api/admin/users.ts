@@ -1,18 +1,29 @@
 import { VercelRequest, VercelResponse } from '@vercel/node'
-import { getPool } from '../lib/db'
-import { verifyToken } from '../lib/auth'
+import { Pool } from 'pg'
 
-// Helper to check if user is admin
+function verifyToken(token: string): { userId: number; email: string } | null {
+  try {
+    const [header, payload, signature] = token.split('.')
+    const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString())
+    
+    if (decoded.exp && decoded.exp < Math.floor(Date.now() / 1000)) {
+      return null
+    }
+    
+    return decoded
+  } catch {
+    return null
+  }
+}
+
 const isAdmin = (token: string): boolean => {
-  // Check for local fallback token (used when backend auth unavailable)
   if (token.startsWith('local_')) {
     return true
   }
   
-  // Check for JWT token
   try {
     const decoded = verifyToken(token) as any
-    return decoded && decoded.userId < 0 // Negative userId indicates admin
+    return decoded && decoded.userId < 0
   } catch {
     return false
   }
@@ -20,8 +31,7 @@ const isAdmin = (token: string): boolean => {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.setHeader('Content-Type', 'application/json')
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end()
@@ -33,51 +43,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: 'Unauthorized' })
     }
 
+    if (!process.env.DATABASE_URL) {
+      return res.status(500).json({ error: 'DATABASE_URL not set' })
+    }
+
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+
     // GET all users
     if (req.method === 'GET') {
-      const pool = getPool()
-      const result = await pool.query(`
-        SELECT 
-          u.id,
-          u.email,
-          u.first_name,
-          u.last_name,
-          u.account_type,
-          u.created_at_account,
-          a.balance,
-          a.buying_power,
-          COUNT(t.id) as transaction_count
-        FROM users u
-        LEFT JOIN accounts a ON u.id = a.user_id
-        LEFT JOIN transactions t ON a.id = t.account_id
-        GROUP BY u.id, a.id
-        ORDER BY u.created_at DESC
-      `)
+      const result = await pool.query('SELECT id, email, first_name, last_name, created_at FROM users ORDER BY created_at DESC')
+      await pool.end()
       
       return res.status(200).json({
-        users: result.rows
+        users: result.rows.map(u => ({
+          id: u.id,
+          email: u.email,
+          firstName: u.first_name,
+          lastName: u.last_name,
+          createdAt: u.created_at
+        }))
       })
     }
 
-    // PUT - Update user
-    if (req.method === 'PUT') {
-      const { userId, firstName, lastName, accountType } = req.body
-      const pool = getPool()
+    // DELETE - Delete user
+    if (req.method === 'DELETE') {
+      const { userId } = req.body
 
       if (!userId) {
+        await pool.end()
         return res.status(400).json({ error: 'userId required' })
       }
 
-      await pool.query(`
-        UPDATE users 
-        SET first_name = $1, last_name = $2, account_type = $3, updated_at = NOW()
-        WHERE id = $4
-      `, [firstName, lastName, accountType, userId])
+      await pool.query('DELETE FROM accounts WHERE user_id = $1', [userId])
+      await pool.query('DELETE FROM users WHERE id = $1', [userId])
+      await pool.end()
 
-      return res.status(200).json({ message: 'User updated successfully' })
+      return res.status(200).json({ message: 'User deleted successfully' })
     }
 
-    // DELETE - Delete user
+    await pool.end()
+    return res.status(405).json({ error: 'Method not allowed' })
+  } catch (error) {
+    return res.status(500).json({
+      error: 'Internal server error',
+      detail: error instanceof Error ? error.message : String(error)
+    })
+  }
+}
     if (req.method === 'DELETE') {
       const { userId } = req.body
       const pool = getPool()

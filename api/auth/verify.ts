@@ -1,17 +1,28 @@
 import { VercelRequest, VercelResponse } from '@vercel/node'
-import { query } from '../lib/db'
-import { verifyToken } from '../lib/auth'
+import { Pool } from 'pg'
+import crypto from 'crypto'
+
+function verifyToken(token: string): { userId: number; email: string } | null {
+  try {
+    const [header, payload, signature] = token.split('.')
+    const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString())
+    
+    if (decoded.exp && decoded.exp < Math.floor(Date.now() / 1000)) {
+      return null
+    }
+    
+    return decoded
+  } catch {
+    return null
+  }
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Enable CORS
-  res.setHeader('Access-Control-Allow-Credentials', 'true')
   res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT')
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization')
+  res.setHeader('Content-Type', 'application/json')
 
   if (req.method === 'OPTIONS') {
-    res.status(200).end()
-    return
+    return res.status(200).end()
   }
 
   if (req.method !== 'GET') {
@@ -32,17 +43,52 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ message: 'Invalid or expired token' })
     }
 
+    if (!process.env.DATABASE_URL) {
+      return res.status(500).json({ message: 'DATABASE_URL not set' })
+    }
+
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+
     // Get user data
-    const userResult = await query('SELECT * FROM users WHERE id = $1', [decoded.userId])
+    const userResult = await pool.query('SELECT * FROM users WHERE id = $1', [decoded.userId])
     
     if (userResult.rows.length === 0) {
+      await pool.end()
       return res.status(404).json({ message: 'User not found' })
     }
 
     const user = userResult.rows[0]
-    const accountResult = await query('SELECT * FROM accounts WHERE user_id = $1', [user.id])
-    const positionsResult = await query('SELECT * FROM positions WHERE account_id = $1', [accountResult.rows[0]?.id])
-    const transactionsResult = await query('SELECT * FROM transactions WHERE account_id = $1 ORDER BY date DESC LIMIT 100', [accountResult.rows[0]?.id])
+    const accountResult = await pool.query('SELECT * FROM accounts WHERE user_id = $1', [user.id])
+    
+    if (!accountResult.rows[0]) {
+      await pool.end()
+      return res.status(404).json({ message: 'Account not found' })
+    }
+
+    const account = accountResult.rows[0]
+
+    await pool.end()
+
+    return res.status(200).json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        account: {
+          balance: parseFloat(account.balance),
+          buyingPower: parseFloat(account.buying_power)
+        }
+      }
+    })
+  } catch (error) {
+    return res.status(500).json({
+      message: 'Error',
+      error: error instanceof Error ? error.message : String(error)
+    })
+  }
+}
 
     const account = accountResult.rows[0]
     const positions = positionsResult.rows.map(p => ({

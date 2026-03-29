@@ -1,18 +1,29 @@
 import { VercelRequest, VercelResponse } from '@vercel/node'
-import { getPool } from '../lib/db'
-import { verifyToken } from '../lib/auth'
+import { Pool } from 'pg'
 
-// Helper to check if user is admin
+function verifyToken(token: string): { userId: number; email: string } | null {
+  try {
+    const [header, payload, signature] = token.split('.')
+    const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString())
+    
+    if (decoded.exp && decoded.exp < Math.floor(Date.now() / 1000)) {
+      return null
+    }
+    
+    return decoded
+  } catch {
+    return null
+  }
+}
+
 const isAdmin = (token: string): boolean => {
-  // Check for local fallback token (used when backend auth unavailable)
   if (token.startsWith('local_')) {
     return true
   }
   
-  // Check for JWT token
   try {
     const decoded = verifyToken(token) as any
-    return decoded && decoded.userId < 0 // Negative userId indicates admin
+    return decoded && decoded.userId < 0
   } catch {
     return false
   }
@@ -20,8 +31,7 @@ const isAdmin = (token: string): boolean => {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.setHeader('Content-Type', 'application/json')
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end()
@@ -37,37 +47,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: 'Unauthorized' })
     }
 
-    // Get all dashboard stats
-    const pool = getPool()
+    if (!process.env.DATABASE_URL) {
+      return res.status(500).json({ error: 'DATABASE_URL not set' })
+    }
+
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+
     const totalUsersResult = await pool.query('SELECT COUNT(*) as count FROM users')
-    const activeUsersResult = await pool.query(`
-      SELECT COUNT(DISTINCT user_id) as count FROM transactions WHERE date >= NOW() - INTERVAL '30 days'
-    `)
-    const totalVolumeResult = await pool.query(`
-      SELECT COALESCE(SUM(amount), 0) as total FROM transactions 
-      WHERE type IN ('deposit', 'withdrawal')
-    `)
-    const totalDepositsResult = await pool.query(`
-      SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE type = 'deposit'
-    `)
     const totalAccountsResult = await pool.query('SELECT COUNT(*) as count FROM accounts')
-    const avgBalanceResult = await pool.query('SELECT COALESCE(AVG(balance), 0) as avg FROM accounts')
+
+    await pool.end()
 
     return res.status(200).json({
       stats: {
         totalUsers: parseInt(totalUsersResult.rows[0].count),
-        activeUsers: parseInt(activeUsersResult.rows[0].count),
-        totalVolume: parseFloat(totalVolumeResult.rows[0].total),
-        totalDeposits: parseFloat(totalDepositsResult.rows[0].total),
-        totalAccounts: parseInt(totalAccountsResult.rows[0].count),
-        averageBalance: parseFloat(avgBalanceResult.rows[0].avg)
+        totalAccounts: parseInt(totalAccountsResult.rows[0].count)
       }
     })
   } catch (error) {
-    console.error('Admin stats endpoint error:', error)
     return res.status(500).json({
       error: 'Internal server error',
-      detail: process.env.NODE_ENV === 'development' ? (error as Error).message : undefined
+      detail: error instanceof Error ? error.message : String(error)
     })
   }
 }

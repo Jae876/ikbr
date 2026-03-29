@@ -1,6 +1,41 @@
 import { VercelRequest, VercelResponse } from '@vercel/node'
 import { Pool } from 'pg'
-import { hashPassword, isValidEmail, isValidPassword, generateToken } from '../lib/auth'
+import crypto from 'crypto'
+
+// Inline from lib/auth
+async function hashPassword(password: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const salt = crypto.randomBytes(16).toString('hex')
+    crypto.scrypt(password, salt, 64, (err, derivedKey) => {
+      if (err) reject(err)
+      resolve(`${salt}:${derivedKey.toString('hex')}`)
+    })
+  })
+}
+
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+}
+
+function isValidPassword(password: string): boolean {
+  return password.length >= 8 &&
+    /[A-Z]/.test(password) &&
+    /[a-z]/.test(password) &&
+    /[0-9]/.test(password) &&
+    /[!@#$%^&*]/.test(password)
+}
+
+function generateToken(userId: number, email: string): string {
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url')
+  const payload = Buffer.from(JSON.stringify({ 
+    userId, 
+    email,
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60
+  })).toString('base64url')
+  const signature = crypto.createHmac('sha256', process.env.JWT_SECRET || 'secret').update(`${header}.${payload}`).digest('base64url')
+  return `${header}.${payload}.${signature}`
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -28,7 +63,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ message: 'DATABASE_URL not set' })
     }
 
-    // Single connection for this request only
     const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 
     // Create users table
