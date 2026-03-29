@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node'
-import { query, ensureTablesExist } from '../lib/db'
+import { query } from '../lib/db'
 import { comparePassword, generateToken, hashPassword } from '../lib/auth'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -19,14 +19,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // Ensure database tables exist (non-blocking)
-    try {
-      await ensureTablesExist()
-    } catch (initErr) {
-      console.warn('Table init issue:', initErr instanceof Error ? initErr.message : initErr)
-      // Continue anyway - tables might already exist
-    }
-    
     const { password } = req.body
 
     if (!password) {
