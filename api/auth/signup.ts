@@ -11,6 +11,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT')
   res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version')
+  res.setHeader('Content-Type', 'application/json')
 
   if (req.method === 'OPTIONS') {
     res.status(200).end()
@@ -22,8 +23,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    console.log('Signup request received')
+    
     // Ensure database tables exist
+    console.log('Ensuring database tables exist...')
     await ensureTablesExist()
+    console.log('Database tables ready')
     
     const { firstName, lastName, email, password, accountType } = req.body
 
@@ -43,15 +48,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Check if user already exists
+    console.log('Checking if user exists:', email)
     const existingUser = await query('SELECT id FROM users WHERE email = $1', [email])
     if (existingUser.rows.length > 0) {
       return res.status(409).json({ message: 'Email already registered' })
     }
+    console.log('User does not exist, proceeding...')
 
     // Hash password
+    console.log('Hashing password...')
     const hashedPassword = await hashPassword(password)
 
     // Create user
+    console.log('Creating user...')
     const userResult = await query(
       'INSERT INTO users (email, password, first_name, last_name, account_type) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, first_name, last_name, account_type, created_at_account',
       [email, hashedPassword, firstName.trim(), lastName.trim(), accountType || 'individual']
@@ -59,18 +68,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const user = userResult.rows[0]
     const accountCreatedAt = user.created_at_account
+    console.log('User created with ID:', user.id)
 
     // Create associated account
+    console.log('Creating account...')
     const accountResult = await query(
       'INSERT INTO accounts (user_id, balance, buying_power, total_deposits, unrealized_gains) VALUES ($1, $2, $3, $4, $5) RETURNING *',
       [user.id, INITIAL_BALANCE, INITIAL_BALANCE * 0.5, 0, 0]
     )
 
     const account = accountResult.rows[0]
+    console.log('Account created with ID:', account.id)
 
     // Generate token
+    console.log('Generating token...')
     const token = generateToken(user.id, user.email)
 
+    console.log('Signup successful, returning response')
+    
     // Return user data
     return res.status(201).json({
       token,
@@ -94,9 +109,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
   } catch (error) {
     console.error('Signup error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     return res.status(500).json({
-      message: 'Signup failed. Please try again.',
-      error: process.env.NODE_ENV === 'development' ? error : undefined
+      message: 'Signup failed',
+      error: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? error : undefined
     })
   }
 }

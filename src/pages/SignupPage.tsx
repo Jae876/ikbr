@@ -92,7 +92,19 @@ export default function SignupPage() {
         })
       })
 
-      const data = await response.json()
+      console.log('Signup response status:', response.status)
+      console.log('Signup response content-type:', response.headers.get('content-type'))
+
+      let data
+      const contentType = response.headers.get('content-type')
+      
+      if (contentType?.includes('application/json')) {
+        data = await response.json()
+      } else {
+        const text = await response.text()
+        console.error('Non-JSON response:', text.substring(0, 200))
+        throw new Error(`Server error (${response.status}). Check console for details.`)
+      }
 
       if (!response.ok) {
         throw new Error(data.message || 'Signup failed')
@@ -102,10 +114,10 @@ export default function SignupPage() {
       localStorage.setItem('token', data.token)
       localStorage.setItem('user', JSON.stringify(data.user))
 
-      setTimeout(() => {
-        navigate('/dashboard')
-      }, 2000)
+      // Redirect immediately on success
+      navigate('/dashboard')
     } catch (err) {
+      console.error('Signup error:', err)
       setError(err instanceof Error ? err.message : 'Signup failed. Please try again.')
     } finally {
       setLoading(false)
