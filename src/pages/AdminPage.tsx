@@ -120,18 +120,28 @@ export default function AdminPage() {
     setLoadingUsers(true)
     try {
       const token = localStorage.getItem('adminToken')
+      console.log('Loading users with token:', token?.substring(0, 20) + '...')
+      
       const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/admin/users`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       })
 
+      console.log('Admin users response status:', response.status)
+      const data = await response.json()
+      console.log('Admin users data:', data)
+
       if (response.ok) {
-        const data = await response.json()
-        setUsers(data.users)
+        setUsers(data.users || [])
+        console.log('Users loaded:', data.users?.length || 0)
+      } else {
+        console.error('Error response:', data)
+        setUsers([])
       }
     } catch (err) {
       console.error('Error loading users:', err)
+      setUsers([])
     } finally {
       setLoadingUsers(false)
     }

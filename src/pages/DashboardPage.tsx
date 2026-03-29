@@ -3,6 +3,9 @@ import { useNavigate, Link } from 'react-router-dom'
 import { ArrowUpRight, ArrowDownRight, Settings, Download, Send, Plus } from 'lucide-react'
 import WithdrawalModal from '@components/modals/WithdrawalModal'
 import AddFundsModal from '@components/modals/AddFundsModal'
+import PlaceTradeModal from '@components/modals/PlaceTradeModal'
+import AdvancedChartsModal from '@components/modals/AdvancedChartsModal'
+import AlertsModal from '@components/modals/AlertsModal'
 
 interface Position {
   symbol: string
@@ -49,6 +52,9 @@ export default function DashboardPage() {
   const [expandedCard, setExpandedCard] = useState<'accountValue' | 'netGains' | null>(null)
   const [isWithdrawalOpen, setIsWithdrawalOpen] = useState(false)
   const [isAddFundsOpen, setIsAddFundsOpen] = useState(false)
+  const [isPlaceTradeOpen, setIsPlaceTradeOpen] = useState(false)
+  const [isAdvancedChartsOpen, setIsAdvancedChartsOpen] = useState(false)
+  const [isAlertsOpen, setIsAlertsOpen] = useState(false)
   const [pendingWithdrawal, setPendingWithdrawal] = useState<{
     withdrawAmount: number
     depositAmount: number
@@ -409,23 +415,32 @@ export default function DashboardPage() {
 
         {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-12">
-          <div className="card p-8 text-center hover:shadow-lg transition-shadow cursor-pointer">
+          <button 
+            onClick={() => setIsPlaceTradeOpen(true)}
+            className="card p-8 text-center hover:shadow-lg transition-shadow cursor-pointer border-2 border-transparent hover:border-blue-500"
+          >
             <div className="text-4xl mb-4">📈</div>
             <h3 className="font-bold text-gray-900 mb-2">Place Trade</h3>
             <p className="text-gray-600 text-sm">Buy or sell securities</p>
-          </div>
+          </button>
 
-          <div className="card p-8 text-center hover:shadow-lg transition-shadow cursor-pointer">
+          <button 
+            onClick={() => setIsAdvancedChartsOpen(true)}
+            className="card p-8 text-center hover:shadow-lg transition-shadow cursor-pointer border-2 border-transparent hover:border-blue-500"
+          >
             <div className="text-4xl mb-4">📊</div>
             <h3 className="font-bold text-gray-900 mb-2">Advanced Charts</h3>
             <p className="text-gray-600 text-sm">Technical analysis tools</p>
-          </div>
+          </button>
 
-          <div className="card p-8 text-center hover:shadow-lg transition-shadow cursor-pointer">
+          <button 
+            onClick={() => setIsAlertsOpen(true)}
+            className="card p-8 text-center hover:shadow-lg transition-shadow cursor-pointer border-2 border-transparent hover:border-blue-500"
+          >
             <div className="text-4xl mb-4">🔔</div>
             <h3 className="font-bold text-gray-900 mb-2">Alerts</h3>
             <p className="text-gray-600 text-sm">Price and news alerts</p>
-          </div>
+          </button>
 
           <Link
             to="/transactions"
@@ -459,6 +474,22 @@ export default function DashboardPage() {
           if (!pendingWithdrawal) setPendingWithdrawal(null)
         }}
         onConfirm={handleAddFunds}
+      />
+
+      <PlaceTradeModal
+        isOpen={isPlaceTradeOpen}
+        onClose={() => setIsPlaceTradeOpen(false)}
+        accountBalance={accountValue}
+      />
+
+      <AdvancedChartsModal
+        isOpen={isAdvancedChartsOpen}
+        onClose={() => setIsAdvancedChartsOpen(false)}
+      />
+
+      <AlertsModal
+        isOpen={isAlertsOpen}
+        onClose={() => setIsAlertsOpen(false)}
       />
     </div>
   )
