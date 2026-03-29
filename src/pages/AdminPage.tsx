@@ -216,6 +216,31 @@ export default function AdminPage() {
     }
   }
 
+  const handleSeedDemoUser = async () => {
+    try {
+      setLoadingUsers(true)
+      const token = localStorage.getItem('adminToken')
+      const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/admin/seed-demo`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        alert(`Demo user ${data.message === 'Demo user already exists' ? 'already exists' : 'created successfully'}!\nEmail: demo@example.com\nPassword: Demo123!@`)
+        loadUsers()
+      }
+    } catch (err) {
+      console.error('Error seeding demo user:', err)
+      alert('Failed to seed demo user')
+    } finally {
+      setLoadingUsers(false)
+    }
+  }
+
   if (authenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-ibkr-dark via-ibkr-navy to-ibkr-blue py-12 px-4">
@@ -245,7 +270,17 @@ export default function AdminPage() {
 
           {/* User Management Section */}
           <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
-            <h2 className="text-2xl font-bold text-ibkr-navy mb-6">User Management</h2>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-ibkr-navy">User Management</h2>
+              <button
+                onClick={handleSeedDemoUser}
+                disabled={loadingUsers}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold text-sm disabled:opacity-50"
+              >
+                <Plus className="w-4 h-4" />
+                Seed Demo User
+              </button>
+            </div>
             
             {loadingUsers ? (
               <div className="text-center py-8">
