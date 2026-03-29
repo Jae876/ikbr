@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node'
-import { pool } from '../lib/db'
+import { getPool } from '../lib/db'
 import { verifyToken } from '../lib/auth'
 
 // Helper to check if user is admin
@@ -35,6 +35,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // GET all users
     if (req.method === 'GET') {
+      const pool = getPool()
       const result = await pool.query(`
         SELECT 
           u.id,
@@ -61,6 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // PUT - Update user
     if (req.method === 'PUT') {
       const { userId, firstName, lastName, accountType } = req.body
+      const pool = getPool()
 
       if (!userId) {
         return res.status(400).json({ error: 'userId required' })
@@ -78,6 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // DELETE - Delete user
     if (req.method === 'DELETE') {
       const { userId } = req.body
+      const pool = getPool()
 
       if (!userId) {
         return res.status(400).json({ error: 'userId required' })

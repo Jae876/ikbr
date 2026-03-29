@@ -4,9 +4,19 @@ let pool: Pool | null = null
 
 export function getPool(): Pool {
   if (!pool) {
+    if (!process.env.DATABASE_URL) {
+      console.error('DATABASE_URL environment variable is not set!')
+      throw new Error('Database connection string (DATABASE_URL) is not configured. Please set it in Vercel environment variables.')
+    }
+    
+    console.log('Creating new database pool...')
     pool = new Pool({
       connectionString: process.env.DATABASE_URL,
       ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    })
+    
+    pool.on('error', (err) => {
+      console.error('Unexpected error on idle client', err)
     })
   }
   return pool

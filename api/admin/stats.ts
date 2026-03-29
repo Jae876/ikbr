@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node'
-import { pool } from '../lib/db'
+import { getPool } from '../lib/db'
 import { verifyToken } from '../lib/auth'
 
 // Helper to check if user is admin
@@ -38,6 +38,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Get all dashboard stats
+    const pool = getPool()
     const totalUsersResult = await pool.query('SELECT COUNT(*) as count FROM users')
     const activeUsersResult = await pool.query(`
       SELECT COUNT(DISTINCT user_id) as count FROM transactions WHERE date >= NOW() - INTERVAL '30 days'
