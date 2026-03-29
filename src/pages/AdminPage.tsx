@@ -230,10 +230,10 @@ export default function AdminPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
             {/* Stats Cards - Real Data */}
             {[
-              { label: 'Total Users', value: stats?.totalUsers.toLocaleString() || '0', color: 'from-blue-500 to-ibkr-blue' },
-              { label: 'Active Users (30d)', value: stats?.activeUsers.toLocaleString() || '0', color: 'from-emerald-500 to-green-600' },
-              { label: 'Total Volume', value: '$' + (stats?.totalVolume.toLocaleString('en-US', { maximumFractionDigits: 0 }) || '0'), color: 'from-orange-500 to-red-500' },
-              { label: 'Total Accounts', value: stats?.totalAccounts.toLocaleString() || '0', color: 'from-purple-500 to-pink-600' }
+              { label: 'Total Users', value: (stats?.totalUsers || 0).toLocaleString(), color: 'from-blue-500 to-ibkr-blue' },
+              { label: 'Active Users (30d)', value: (stats?.activeUsers || 0).toLocaleString(), color: 'from-emerald-500 to-green-600' },
+              { label: 'Total Volume', value: '$' + (stats?.totalVolume || 0).toLocaleString('en-US', { maximumFractionDigits: 0 }), color: 'from-orange-500 to-red-500' },
+              { label: 'Total Accounts', value: (stats?.totalAccounts || 0).toLocaleString(), color: 'from-purple-500 to-pink-600' }
             ].map((stat, idx) => (
               <div key={idx} className="bg-white/10 border-2 border-white/20 rounded-xl p-6 backdrop-blur-md hover:border-white/40 transition-all duration-300">
                 <p className="text-white/60 text-sm font-semibold mb-2">{stat.label}</p>

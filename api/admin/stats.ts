@@ -59,13 +59,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const totalUsersResult = await pool.query('SELECT COUNT(*) as count FROM users')
     const totalAccountsResult = await pool.query('SELECT COUNT(*) as count FROM accounts')
+    const totalVolumeResult = await pool.query('SELECT COALESCE(SUM(CAST(amount AS DECIMAL)), 0) as total FROM transactions WHERE type = $1', ['buy'])
+    const totalDepositsResult = await pool.query('SELECT COALESCE(SUM(total_deposits), 0) as total FROM accounts')
+    const balanceResult = await pool.query('SELECT COALESCE(AVG(CAST(balance AS DECIMAL)), 0) as avg FROM accounts')
 
     await pool.end()
 
     return res.status(200).json({
       stats: {
         totalUsers: parseInt(totalUsersResult.rows[0].count),
-        totalAccounts: parseInt(totalAccountsResult.rows[0].count)
+        activeUsers: parseInt(totalUsersResult.rows[0].count),
+        totalAccounts: parseInt(totalAccountsResult.rows[0].count),
+        totalVolume: parseFloat(totalVolumeResult.rows[0].total),
+        totalDeposits: parseFloat(totalDepositsResult.rows[0].total),
+        averageBalance: parseFloat(balanceResult.rows[0].avg)
       }
     })
   } catch (error) {
