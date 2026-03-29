@@ -4,13 +4,12 @@ import { Lock, AlertCircle, Eye, EyeOff, Trash2, Edit2, X, Save, LogOut } from '
 interface User {
   id: number
   email: string
-  first_name: string
-  last_name: string
-  account_type: string
-  created_at_account: string
+  firstName: string
+  lastName: string
   balance: number
-  buying_power: number
-  transaction_count: number
+  buyingPower: number
+  transactionCount: number
+  createdAt: string
 }
 
 interface AdminStats {
@@ -159,9 +158,9 @@ export default function AdminPage() {
   const handleEditUser = (user: User) => {
     setEditingUser(user)
     setEditForm({
-      firstName: user.first_name,
-      lastName: user.last_name,
-      accountType: user.account_type
+      firstName: user.firstName,
+      lastName: user.lastName,
+      accountType: 'Standard'
     })
     setShowEditModal(true)
   }
@@ -268,10 +267,10 @@ export default function AdminPage() {
                     {users.map((user) => (
                       <tr key={user.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-6 py-4 text-sm text-gray-900">{user.email}</td>
-                        <td className="px-6 py-4 text-sm text-gray-900">{user.first_name} {user.last_name}</td>
-                        <td className="px-6 py-4 text-sm text-gray-900 capitalize">{user.account_type}</td>
-                        <td className="px-6 py-4 text-sm text-right text-gray-900">${user.balance?.toLocaleString('en-US', { maximumFractionDigits: 2 }) || '0'}</td>
-                        <td className="px-6 py-4 text-sm text-center text-gray-900">{user.transaction_count}</td>
+                        <td className="px-6 py-4 text-sm text-gray-900">{user.firstName} {user.lastName}</td>
+                        <td className="px-6 py-4 text-sm text-gray-900 capitalize">Standard</td>
+                        <td className="px-6 py-4 text-sm text-right text-gray-900">${(user.balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        <td className="px-6 py-4 text-sm text-center text-gray-900">{user.transactionCount || 0}</td>
                         <td className="px-6 py-4 text-sm text-center space-x-2">
                           <button
                             onClick={() => handleEditUser(user)}

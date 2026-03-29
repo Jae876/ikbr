@@ -53,9 +53,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false } })
 
-    // GET all users
+    // GET all users with account data
     if (req.method === 'GET') {
-      const result = await pool.query('SELECT id, email, first_name, last_name, created_at FROM users ORDER BY created_at DESC')
+      const result = await pool.query(`
+        SELECT 
+          u.id, 
+          u.email, 
+          u.first_name, 
+          u.last_name, 
+          u.created_at,
+          a.balance,
+          a.buying_power,
+          COUNT(t.id) as transaction_count
+        FROM users u
+        LEFT JOIN accounts a ON u.id = a.user_id
+        LEFT JOIN transactions t ON a.id = t.account_id
+        GROUP BY u.id, a.id
+        ORDER BY u.created_at DESC
+      `)
       await pool.end()
       
       return res.status(200).json({
@@ -64,12 +79,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           email: u.email,
           firstName: u.first_name,
           lastName: u.last_name,
+          balance: u.balance ? parseFloat(u.balance) : 0,
+          buyingPower: u.buying_power ? parseFloat(u.buying_power) : 0,
+          transactionCount: parseInt(u.transaction_count),
           createdAt: u.created_at
         }))
       })
     }
 
-    // DELETE - Delete user
+    // DELETE - Delete user and related records
     if (req.method === 'DELETE') {
       const { userId } = req.body
 
@@ -78,50 +96,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: 'userId required' })
       }
 
-      await pool.query('DELETE FROM accounts WHERE user_id = $1', [userId])
-      await pool.query('DELETE FROM users WHERE id = $1', [userId])
-      await pool.end()
+      try {
+        // Get account ID first
+        const accountResult = await pool.query('SELECT id FROM accounts WHERE user_id = $1', [userId])
+        
+        // Delete related records
+        for (const account of accountResult.rows) {
+          await pool.query('DELETE FROM transactions WHERE account_id = $1', [account.id])
+          await pool.query('DELETE FROM positions WHERE account_id = $1', [account.id])
+        }
 
-      return res.status(200).json({ message: 'User deleted successfully' })
+        await pool.query('DELETE FROM accounts WHERE user_id = $1', [userId])
+        await pool.query('DELETE FROM users WHERE id = $1', [userId])
+        await pool.end()
+
+        return res.status(200).json({ message: 'User deleted successfully' })
+      } catch (err) {
+        await pool.end()
+        throw err
+      }
     }
 
     await pool.end()
     return res.status(405).json({ error: 'Method not allowed' })
-  } catch (error) {
-    return res.status(500).json({
-      error: 'Internal server error',
-      detail: error instanceof Error ? error.message : String(error)
-    })
-  }
-}
-    if (req.method === 'DELETE') {
-      const { userId } = req.body
-      const pool = getPool()
-
-      if (!userId) {
-        return res.status(400).json({ error: 'userId required' })
-      }
-
-      // Delete related records first (transactions, positions, accounts)
-      const accountResult = await pool.query('SELECT id FROM accounts WHERE user_id = $1', [userId])
-      
-      for (const account of accountResult.rows) {
-        await pool.query('DELETE FROM transactions WHERE account_id = $1', [account.id])
-        await pool.query('DELETE FROM positions WHERE account_id = $1', [account.id])
-      }
-
-      await pool.query('DELETE FROM accounts WHERE user_id = $1', [userId])
-      await pool.query('DELETE FROM users WHERE id = $1', [userId])
-
-      return res.status(200).json({ message: 'User deleted successfully' })
-    }
-
-    return res.status(405).json({ error: 'Method not allowed' })
-  } catch (error) {
-    console.error('Admin users endpoint error:', error)
-    return res.status(500).json({
-      error: 'Internal server error',
-      detail: process.env.NODE_ENV === 'development' ? (error as Error).message : undefined
     })
   }
 }
