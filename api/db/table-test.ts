@@ -1,7 +1,7 @@
 import { VercelRequest, VercelResponse } from '@vercel/node'
 import { Pool } from 'pg'
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(_req: VercelRequest, res: VercelResponse) {
   try {
     if (!process.env.DATABASE_URL) {
       return res.status(500).json({ error: 'DATABASE_URL not set' })
