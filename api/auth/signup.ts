@@ -4,6 +4,36 @@ import { hashPassword, isValidEmail, isValidPassword, generateToken } from '../l
 
 const INITIAL_BALANCE = 50000
 
+async function ensureTablesExist() {
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        first_name VARCHAR(100),
+        last_name VARCHAR(100),
+        account_type VARCHAR(50),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS accounts (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER UNIQUE NOT NULL,
+        balance DECIMAL(15, 2),
+        buying_power DECIMAL(15, 2),
+        total_deposits DECIMAL(15, 2),
+        unrealized_gains DECIMAL(15, 2),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+  } catch (err) {
+    // Ignore - tables may exist
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Credentials', 'true')
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -20,6 +50,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    await ensureTablesExist()
+
     const { firstName, lastName, email, password, accountType } = req.body
 
     if (!firstName?.trim() || !lastName?.trim()) {
@@ -47,7 +79,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Create user
     const userResult = await query(
-      'INSERT INTO users (email, password, first_name, last_name, account_type) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, first_name, last_name, account_type, created_at_account',
+      'INSERT INTO users (email, password, first_name, last_name, account_type) VALUES ($1, $2, $3, $4, $5) RETURNING *',
       [email, hashedPassword, firstName.trim(), lastName.trim(), accountType || 'individual']
     )
 
@@ -76,7 +108,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           buyingPower: parseFloat(account.buying_power),
           totalDeposits: parseFloat(account.total_deposits),
           unrealizedGains: parseFloat(account.unrealized_gains),
-          createdAt: user.created_at_account,
           positions: [],
           transactions: []
         }
@@ -85,15 +116,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (error) {
     console.error('Signup error:', error)
     const msg = error instanceof Error ? error.message : 'Unknown error'
-    
-    // Check if tables don't exist
-    if (msg.includes('does not exist') || msg.includes('undefined')) {
-      return res.status(500).json({
-        message: 'Database not initialized',
-        error: 'Tables missing - contact support'
-      })
-    }
-
     return res.status(500).json({
       message: 'Signup failed',
       error: msg

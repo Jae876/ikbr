@@ -2,6 +2,60 @@ import { VercelRequest, VercelResponse } from '@vercel/node'
 import { query } from '../lib/db'
 import { comparePassword, generateToken, isValidEmail } from '../lib/auth'
 
+async function ensureTablesExist() {
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        first_name VARCHAR(100),
+        last_name VARCHAR(100),
+        account_type VARCHAR(50),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS accounts (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER UNIQUE NOT NULL,
+        balance DECIMAL(15, 2),
+        buying_power DECIMAL(15, 2),
+        total_deposits DECIMAL(15, 2),
+        unrealized_gains DECIMAL(15, 2),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS positions (
+        id SERIAL PRIMARY KEY,
+        account_id INTEGER,
+        symbol VARCHAR(10),
+        quantity INTEGER,
+        avg_cost DECIMAL(10, 2),
+        current_price DECIMAL(10, 2),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS transactions (
+        id SERIAL PRIMARY KEY,
+        account_id INTEGER,
+        date VARCHAR(10),
+        type VARCHAR(50),
+        amount DECIMAL(15, 2),
+        description VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+  } catch (err) {
+    // Ignore - tables may exist
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Credentials', 'true')
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -18,6 +72,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    await ensureTablesExist()
+
     const { email, password } = req.body
 
     if (!isValidEmail(email)) {
@@ -29,7 +85,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Get user
-    const userResult = await query('SELECT id, email, password, first_name, last_name FROM users WHERE email = $1', [email])
+    const userResult = await query('SELECT * FROM users WHERE email = $1', [email])
 
     if (userResult.rows.length === 0) {
       return res.status(401).json({ message: 'Invalid credentials' })
@@ -66,6 +122,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         email: user.email,
         firstName: user.first_name,
         lastName: user.last_name,
+        accountType: user.account_type,
         account: {
           id: account.id,
           balance: parseFloat(account.balance),
@@ -77,9 +134,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             symbol: p.symbol,
             quantity: p.quantity,
             avgCost: parseFloat(p.avg_cost),
-            currentPrice: parseFloat(p.current_price),
-            unrealizedPl: p.unrealized_pl,
-            unrealizedPlPercent: p.unrealized_pl_percent
+            currentPrice: parseFloat(p.current_price)
           })),
           transactions: transactionsResult.rows.map((t: any) => ({
             id: t.id,
@@ -93,10 +148,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
   } catch (error) {
     console.error('Login error:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    const msg = error instanceof Error ? error.message : 'Unknown error'
     return res.status(500).json({
       message: 'Login failed',
-      error: errorMessage
+      error: msg
     })
   }
 }
