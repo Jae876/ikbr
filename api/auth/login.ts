@@ -4,25 +4,16 @@ import { comparePassword, generateToken, isValidEmail } from '../lib/auth'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
   res.setHeader('Content-Type', 'application/json')
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end()
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'Method not allowed' })
-  }
-
-  let pool: Pool | null = null
+  if (req.method === 'OPTIONS') return res.status(200).end()
+  if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' })
 
   try {
     const { email, password } = req.body
 
     if (!email || !password) {
-      return res.status(400).json({ message: 'Email and password required' })
+      return res.status(400).json({ message: 'Missing fields' })
     }
 
     if (!isValidEmail(email)) {
@@ -30,16 +21,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (!process.env.DATABASE_URL) {
-      return res.status(500).json({ message: 'Database not configured' })
+      return res.status(500).json({ message: 'DATABASE_URL not set' })
     }
 
-    pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
-      max: 1,
-      idleTimeoutMillis: 5000,
-      connectionTimeoutMillis: 5000
-    })
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 
     // Get user
     const userRes = await pool.query('SELECT * FROM users WHERE email = $1', [email])
@@ -85,20 +70,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     })
   } catch (error) {
-    if (pool) {
-      try {
-        await pool.end()
-      } catch (e) {
-        // Ignore
-      }
-    }
-
-    console.error('Login error:', error)
-    const msg = error instanceof Error ? error.message : String(error)
-
     return res.status(500).json({
-      message: 'Login failed',
-      error: msg
+      message: 'Error',
+      error: error instanceof Error ? error.message : String(error)
     })
   }
 }
