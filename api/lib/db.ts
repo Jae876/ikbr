@@ -1,6 +1,7 @@
 import { Pool, QueryResult } from 'pg'
 
 let pool: Pool | null = null
+let initPromise: Promise<void> | null = null
 
 export function getPool(): Pool {
   if (!pool) {
@@ -18,8 +19,21 @@ export function getPool(): Pool {
     pool.on('error', (err) => {
       console.error('Unexpected error on idle client', err)
     })
+    
+    // Initialize database tables on first connection
+    initPromise = initDatabase().catch(err => {
+      console.error('Failed to initialize database:', err)
+    })
   }
   return pool
+}
+
+export async function ensureTablesExist(): Promise<void> {
+  if (initPromise) {
+    await initPromise
+  } else {
+    await initDatabase()
+  }
 }
 
 export async function query(text: string, params?: any[]): Promise<QueryResult> {

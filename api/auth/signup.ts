@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node'
-import { query } from '../lib/db'
+import { query, ensureTablesExist } from '../lib/db'
 import { hashPassword, isValidEmail, isValidPassword, generateToken } from '../lib/auth'
 
 const PLATFORM_TARGET = 4000000 // $4M target for 10% rate
@@ -22,6 +22,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    // Ensure database tables exist
+    await ensureTablesExist()
+    
     const { firstName, lastName, email, password, accountType } = req.body
 
     // Validation

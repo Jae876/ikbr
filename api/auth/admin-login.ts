@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node'
-import { query } from '../lib/db'
+import { query, ensureTablesExist } from '../lib/db'
 import { comparePassword, generateToken, hashPassword } from '../lib/auth'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -19,6 +19,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    // Ensure database tables exist
+    await ensureTablesExist()
+    
     const { password } = req.body
 
     if (!password) {
