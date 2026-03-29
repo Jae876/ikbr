@@ -2,6 +2,37 @@ import { VercelRequest, VercelResponse } from '@vercel/node'
 import { query } from '../lib/db'
 import { comparePassword, generateToken, isValidEmail } from '../lib/auth'
 
+async function ensureTablesExist() {
+  try {
+    // Create tables if they don't exist
+    await query(`CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      email VARCHAR(255) UNIQUE NOT NULL,
+      password VARCHAR(255) NOT NULL,
+      first_name VARCHAR(100) NOT NULL,
+      last_name VARCHAR(100) NOT NULL,
+      account_type VARCHAR(50) DEFAULT 'individual',
+      created_at_account TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`)
+
+    await query(`CREATE TABLE IF NOT EXISTS accounts (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      balance DECIMAL(15, 2) DEFAULT 0,
+      buying_power DECIMAL(15, 2) DEFAULT 0,
+      margin_level DECIMAL(5, 2) DEFAULT 2.0,
+      total_deposits DECIMAL(15, 2) DEFAULT 0,
+      unrealized_gains DECIMAL(15, 2) DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`)
+  } catch (err) {
+    // Ignore - tables may already exist
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Credentials', 'true')
@@ -19,6 +50,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    // Ensure tables exist
+    await ensureTablesExist()
+    
     const { email, password } = req.body
 
     // Validation

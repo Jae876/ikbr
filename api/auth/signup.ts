@@ -2,7 +2,83 @@ import { VercelRequest, VercelResponse } from '@vercel/node'
 import { query } from '../lib/db'
 import { hashPassword, isValidEmail, isValidPassword, generateToken } from '../lib/auth'
 
-const INITIAL_BALANCE = 50000 // Starting balance for new users
+const INITIAL_BALANCE = 50000
+
+async function ensureTablesExist() {
+  try {
+    // Try to create tables (idempotent - won't fail if they exist)
+    await query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        first_name VARCHAR(100) NOT NULL,
+        last_name VARCHAR(100) NOT NULL,
+        account_type VARCHAR(50) DEFAULT 'individual',
+        created_at_account TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS accounts (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+        balance DECIMAL(15, 2) DEFAULT 0,
+        buying_power DECIMAL(15, 2) DEFAULT 0,
+        margin_level DECIMAL(5, 2) DEFAULT 2.0,
+        total_deposits DECIMAL(15, 2) DEFAULT 0,
+        unrealized_gains DECIMAL(15, 2) DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS positions (
+        id SERIAL PRIMARY KEY,
+        account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        symbol VARCHAR(10) NOT NULL,
+        quantity INTEGER NOT NULL,
+        avg_cost DECIMAL(10, 2) NOT NULL,
+        current_price DECIMAL(10, 2) NOT NULL,
+        unrealized_pl DECIMAL(15, 2),
+        unrealized_pl_percent DECIMAL(10, 4),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS transactions (
+        id SERIAL PRIMARY KEY,
+        account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        date VARCHAR(10) NOT NULL,
+        type VARCHAR(50) NOT NULL,
+        amount DECIMAL(15, 2) NOT NULL,
+        description VARCHAR(255),
+        balance DECIMAL(15, 2),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS admin_users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(100) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        role VARCHAR(50) DEFAULT 'admin',
+        last_login TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+  } catch (err) {
+    console.warn('Table creation warning:', err instanceof Error ? err.message : err)
+    // Ignore errors - tables might already exist
+  }
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Enable CORS
@@ -22,6 +98,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    // Ensure tables exist (silent)
+    await ensureTablesExist()
+    
     const { firstName, lastName, email, password, accountType } = req.body
 
     // Validation
