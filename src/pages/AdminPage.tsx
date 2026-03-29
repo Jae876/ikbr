@@ -220,9 +220,12 @@ export default function AdminPage() {
     try {
       setLoadingUsers(true)
       const token = localStorage.getItem('adminToken')
-      console.log('Seeding demo user with token:', token?.substring(0, 20) + '...')
+      const apiUrl = import.meta.env.VITE_API_URL || '/api'
+      const fullUrl = `${apiUrl}/admin/seed-demo`
+      console.log('Seeding demo user at URL:', fullUrl)
+      console.log('Token:', token?.substring(0, 20) + '...')
       
-      const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/admin/seed-demo`, {
+      const response = await fetch(fullUrl, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -230,12 +233,25 @@ export default function AdminPage() {
         }
       })
 
-      const data = await response.json()
-      console.log('Seed response:', data, 'Status:', response.status)
+      console.log('Response status:', response.status)
+      console.log('Response content-type:', response.headers.get('content-type'))
+      
+      let data
+      const contentType = response.headers.get('content-type')
+      if (contentType?.includes('application/json')) {
+        data = await response.json()
+      } else {
+        const text = await response.text()
+        console.error('Response is not JSON:', text.substring(0, 200))
+        alert(`Unexpected response format. Check console.\nGot: ${text.substring(0, 100)}`)
+        return
+      }
+
+      console.log('Seed response data:', data)
 
       if (response.ok) {
         alert(`Demo user ${data.message === 'Demo user already exists' ? 'already exists' : 'created successfully'}!\nEmail: demo@example.com\nPassword: Demo123!@`)
-        await new Promise(resolve => setTimeout(resolve, 500)) // Brief delay to ensure DB write
+        await new Promise(resolve => setTimeout(resolve, 500))
         loadUsers()
       } else {
         alert(`Error: ${data.error || 'Failed to seed demo user'}\n${data.detail || ''}`)
