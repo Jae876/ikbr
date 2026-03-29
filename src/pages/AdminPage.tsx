@@ -1,5 +1,26 @@
 import { useState, useEffect } from 'react'
-import { Lock, AlertCircle, Eye, EyeOff } from 'lucide-react'
+import { Lock, AlertCircle, Eye, EyeOff, Trash2, Edit2, Plus, X, Save, LogOut } from 'lucide-react'
+
+interface User {
+  id: number
+  email: string
+  first_name: string
+  last_name: string
+  account_type: string
+  created_at_account: string
+  balance: number
+  buying_power: number
+  transaction_count: number
+}
+
+interface AdminStats {
+  totalUsers: number
+  activeUsers: number
+  totalVolume: number
+  totalDeposits: number
+  totalAccounts: number
+  averageBalance: number
+}
 
 export default function AdminPage() {
   const [password, setPassword] = useState('')
@@ -7,6 +28,13 @@ export default function AdminPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [authenticated, setAuthenticated] = useState(false)
+  const [users, setUsers] = useState<User[]>([])
+  const [stats, setStats] = useState<AdminStats | null>(null)
+  const [loadingUsers, setLoadingUsers] = useState(false)
+  const [editingUser, setEditingUser] = useState<User | null>(null)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
+  const [editForm, setEditForm] = useState({ firstName: '', lastName: '', accountType: '' })
 
   const ADMIN_PASSWORD = 'jaeseanjae' // Fallback local password
 
@@ -82,6 +110,112 @@ export default function AdminPage() {
     setAuthenticated(false)
   }
 
+  useEffect(() => {
+    if (authenticated) {
+      loadUsers()
+      loadStats()
+    }
+  }, [authenticated])
+
+  const loadUsers = async () => {
+    setLoadingUsers(true)
+    try {
+      const token = localStorage.getItem('adminToken')
+      const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/admin/users`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setUsers(data.users)
+      }
+    } catch (err) {
+      console.error('Error loading users:', err)
+    } finally {
+      setLoadingUsers(false)
+    }
+  }
+
+  const loadStats = async () => {
+    try {
+      const token = localStorage.getItem('adminToken')
+      const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/admin/stats`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setStats(data.stats)
+      }
+    } catch (err) {
+      console.error('Error loading stats:', err)
+    }
+  }
+
+  const handleEditUser = (user: User) => {
+    setEditingUser(user)
+    setEditForm({
+      firstName: user.first_name,
+      lastName: user.last_name,
+      accountType: user.account_type
+    })
+    setShowEditModal(true)
+  }
+
+  const handleSaveUser = async () => {
+    if (!editingUser) return
+
+    try {
+      const token = localStorage.getItem('adminToken')
+      const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/admin/users`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          userId: editingUser.id,
+          firstName: editForm.firstName,
+          lastName: editForm.lastName,
+          accountType: editForm.accountType
+        })
+      })
+
+      if (response.ok) {
+        setShowEditModal(false)
+        setEditingUser(null)
+        loadUsers()
+      }
+    } catch (err) {
+      console.error('Error saving user:', err)
+    }
+  }
+
+  const handleDeleteUser = async (userId: number) => {
+    try {
+      const token = localStorage.getItem('adminToken')
+      const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/admin/users`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ userId })
+      })
+
+      if (response.ok) {
+        setDeleteConfirm(null)
+        loadUsers()
+      }
+    } catch (err) {
+      console.error('Error deleting user:', err)
+    }
+  }
+
   if (authenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-ibkr-dark via-ibkr-navy to-ibkr-blue py-12 px-4">
@@ -94,12 +228,12 @@ export default function AdminPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-            {/* Stats Cards */}
+            {/* Stats Cards - Real Data */}
             {[
-              { label: 'Total Users', value: '1,247', color: 'from-blue-500 to-ibkr-blue' },
-              { label: 'Active Trading', value: '847', color: 'from-emerald-500 to-green-600' },
-              { label: 'Total Volume', value: '$2.4B', color: 'from-orange-500 to-red-500' },
-              { label: 'Platform Status', value: 'Operational', color: 'from-purple-500 to-pink-600' }
+              { label: 'Total Users', value: stats?.totalUsers.toLocaleString() || '0', color: 'from-blue-500 to-ibkr-blue' },
+              { label: 'Active Users (30d)', value: stats?.activeUsers.toLocaleString() || '0', color: 'from-emerald-500 to-green-600' },
+              { label: 'Total Volume', value: '$' + (stats?.totalVolume.toLocaleString('en-US', { maximumFractionDigits: 0 }) || '0'), color: 'from-orange-500 to-red-500' },
+              { label: 'Total Accounts', value: stats?.totalAccounts.toLocaleString() || '0', color: 'from-purple-500 to-pink-600' }
             ].map((stat, idx) => (
               <div key={idx} className="bg-white/10 border-2 border-white/20 rounded-xl p-6 backdrop-blur-md hover:border-white/40 transition-all duration-300">
                 <p className="text-white/60 text-sm font-semibold mb-2">{stat.label}</p>
@@ -109,94 +243,177 @@ export default function AdminPage() {
             ))}
           </div>
 
-          {/* Admin Sections */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
-            {/* User Management */}
-            <div className="card-premium bg-white p-8">
-              <h3 className="text-xl font-bold text-ibkr-navy mb-4 flex items-center gap-2">
-                <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                  <span className="text-2xl">👥</span>
-                </div>
-                User Management
-              </h3>
-              <p className="text-ibkr-gray-600 mb-4 font-medium">Manage user accounts, permissions, and access levels</p>
-              <div className="space-y-2">
-                <button className="w-full py-2 px-4 bg-ibkr-blue text-white rounded-lg hover:bg-ibkr-navy transition font-semibold text-sm">
-                  View All Users
-                </button>
-                <button className="w-full py-2 px-4 bg-ibkr-gray-100 text-ibkr-blue rounded-lg hover:bg-ibkr-gray-200 transition font-semibold text-sm border border-ibkr-blue">
-                  Manage Roles
-                </button>
+          {/* User Management Section */}
+          <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
+            <h2 className="text-2xl font-bold text-ibkr-navy mb-6">User Management</h2>
+            
+            {loadingUsers ? (
+              <div className="text-center py-8">
+                <p className="text-gray-600">Loading users...</p>
               </div>
-            </div>
-
-            {/* Analytics */}
-            <div className="card-premium bg-white p-8">
-              <h3 className="text-xl font-bold text-ibkr-navy mb-4 flex items-center gap-2">
-                <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
-                  <span className="text-2xl">📊</span>
-                </div>
-                Analytics
-              </h3>
-              <p className="text-ibkr-gray-600 mb-4 font-medium">System performance, user activity, and trading metrics</p>
-              <div className="space-y-2">
-                <button className="w-full py-2 px-4 bg-ibkr-blue text-white rounded-lg hover:bg-ibkr-navy transition font-semibold text-sm">
-                  View Analytics
-                </button>
-                <button className="w-full py-2 px-4 bg-ibkr-gray-100 text-ibkr-blue rounded-lg hover:bg-ibkr-gray-200 transition font-semibold text-sm border border-ibkr-blue">
-                  Export Reports
-                </button>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Email</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Name</th>
+                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">Account Type</th>
+                      <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900">Balance</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">Transactions</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {users.map((user) => (
+                      <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-6 py-4 text-sm text-gray-900">{user.email}</td>
+                        <td className="px-6 py-4 text-sm text-gray-900">{user.first_name} {user.last_name}</td>
+                        <td className="px-6 py-4 text-sm text-gray-900 capitalize">{user.account_type}</td>
+                        <td className="px-6 py-4 text-sm text-right text-gray-900">${user.balance?.toLocaleString('en-US', { maximumFractionDigits: 2 }) || '0'}</td>
+                        <td className="px-6 py-4 text-sm text-center text-gray-900">{user.transaction_count}</td>
+                        <td className="px-6 py-4 text-sm text-center space-x-2">
+                          <button
+                            onClick={() => handleEditUser(user)}
+                            className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition text-xs font-medium"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                            Edit
+                          </button>
+                          {deleteConfirm === user.id ? (
+                            <button
+                              onClick={() => handleDeleteUser(user.id)}
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 transition text-xs font-medium"
+                            >
+                              Confirm
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => setDeleteConfirm(user.id)}
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition text-xs font-medium"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              Delete
+                            </button>
+                          )}
+                          {deleteConfirm === user.id && (
+                            <button
+                              onClick={() => setDeleteConfirm(null)}
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-gray-500 text-white rounded hover:bg-gray-600 transition text-xs font-medium"
+                            >
+                              Cancel
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            </div>
-
-            {/* Security */}
-            <div className="card-premium bg-white p-8">
-              <h3 className="text-xl font-bold text-ibkr-navy mb-4 flex items-center gap-2">
-                <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center">
-                  <span className="text-2xl">🔒</span>
-                </div>
-                Security
-              </h3>
-              <p className="text-ibkr-gray-600 mb-4 font-medium">Monitor system security, logs, and suspicious activity</p>
-              <div className="space-y-2">
-                <button className="w-full py-2 px-4 bg-ibkr-blue text-white rounded-lg hover:bg-ibkr-navy transition font-semibold text-sm">
-                  Security Logs
-                </button>
-                <button className="w-full py-2 px-4 bg-ibkr-gray-100 text-ibkr-blue rounded-lg hover:bg-ibkr-gray-200 transition font-semibold text-sm border border-ibkr-blue">
-                  Alert Settings
-                </button>
-              </div>
-            </div>
-
-            {/* Database */}
-            <div className="card-premium bg-white p-8">
-              <h3 className="text-xl font-bold text-ibkr-navy mb-4 flex items-center gap-2">
-                <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                  <span className="text-2xl">💾</span>
-                </div>
-                Database
-              </h3>
-              <p className="text-ibkr-gray-600 mb-4 font-medium">Manage backups, migrations, and database maintenance</p>
-              <div className="space-y-2">
-                <button className="w-full py-2 px-4 bg-ibkr-blue text-white rounded-lg hover:bg-ibkr-navy transition font-semibold text-sm">
-                  Database Status
-                </button>
-                <button className="w-full py-2 px-4 bg-ibkr-gray-100 text-ibkr-blue rounded-lg hover:bg-ibkr-gray-200 transition font-semibold text-sm border border-ibkr-blue">
-                  Backup Now
-                </button>
-              </div>
-            </div>
+            )}
           </div>
-
+          
           {/* Logout Button */}
           <div className="flex justify-center">
             <button
               onClick={handleLogout}
-              className="px-8 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition font-bold"
+              className="inline-flex items-center gap-2 px-8 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition font-bold"
             >
+              <LogOut className="w-5 h-5" />
               Logout from Admin
             </button>
           </div>
+
+          {/* Edit Modal */}
+          {showEditModal && editingUser && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-bold text-gray-900">Edit User</h3>
+                  <button
+                    onClick={() => setShowEditModal(false)}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                <div className="space-y-4 mb-6">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">Email</label>
+                    <input
+                      type="email"
+                      value={editingUser.email}
+                      disabled
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-900 mb-2">First Name</label>
+                      <input
+                        type="text"
+                        value={editForm.firstName}
+                        onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-900 mb-2">Last Name</label>
+                      <input
+                        type="text"
+                        value={editForm.lastName}
+                        onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">Account Type</label>
+                    <select
+                      value={editForm.accountType}
+                      onChange={(e) => setEditForm({ ...editForm, accountType: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-blue-500 outline-none"
+                    >
+                      <option value="individual">Individual</option>
+                      <option value="joint">Joint</option>
+                      <option value="ira">IRA</option>
+                      <option value="corporate">Corporate</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">Balance</label>
+                    <input
+                      type="text"
+                      value={'$' + editingUser.balance?.toLocaleString('en-US', { maximumFractionDigits: 2 }) || '$0'}
+                      disabled
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowEditModal(false)}
+                    className="flex-1 px-4 py-2 bg-gray-300 text-gray-900 rounded-lg hover:bg-gray-400 transition font-semibold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveUser}
+                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold"
+                  >
+                    <Save className="w-4 h-4" />
+                    Save
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     )
