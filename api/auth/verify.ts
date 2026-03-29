@@ -4,7 +4,7 @@ import crypto from 'crypto'
 
 function verifyToken(token: string): { userId: number; email: string } | null {
   try {
-    const [header, payload, signature] = token.split('.')
+    const [_header, payload, _signature] = token.split('.')
     const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString())
     
     if (decoded.exp && decoded.exp < Math.floor(Date.now() / 1000)) {
