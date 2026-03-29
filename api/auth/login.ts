@@ -19,8 +19,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // Ensure database tables exist
-    await ensureTablesExist()
+    // Ensure database tables exist (non-blocking)
+    try {
+      await ensureTablesExist()
+    } catch (initErr) {
+      console.warn('Table init issue:', initErr instanceof Error ? initErr.message : initErr)
+      // Continue anyway - tables might already exist
+    }
     
     const { email, password } = req.body
 

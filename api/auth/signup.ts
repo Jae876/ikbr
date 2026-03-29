@@ -25,10 +25,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     console.log('Signup request received')
     
-    // Ensure database tables exist
-    console.log('Ensuring database tables exist...')
-    await ensureTablesExist()
-    console.log('Database tables ready')
+    // Ensure database tables exist (non-blocking)
+    try {
+      console.log('Checking database tables...')
+      await ensureTablesExist()
+      console.log('Database tables ready')
+    } catch (initErr) {
+      console.warn('Table init issue (may already exist):', initErr instanceof Error ? initErr.message : initErr)
+      // Continue anyway - tables might already exist
+    }
     
     const { firstName, lastName, email, password, accountType } = req.body
 
