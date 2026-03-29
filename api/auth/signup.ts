@@ -63,7 +63,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ message: 'DATABASE_URL not set' })
     }
 
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+    console.log('DATABASE_URL:', process.env.DATABASE_URL.substring(0, 30) + '...')
+
+    const pool = new Pool({ 
+      connectionString: process.env.DATABASE_URL, 
+      ssl: { rejectUnauthorized: false }
+    })
 
     // Create users table
     await pool.query(`
