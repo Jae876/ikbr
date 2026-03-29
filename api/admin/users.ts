@@ -55,36 +55,85 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // GET all users with account data
     if (req.method === 'GET') {
-      const result = await pool.query(`
-        SELECT 
-          u.id, 
-          u.email, 
-          u.first_name, 
-          u.last_name, 
-          u.created_at,
-          a.balance,
-          a.buying_power,
-          COUNT(t.id) as transaction_count
-        FROM users u
-        LEFT JOIN accounts a ON u.id = a.user_id
-        LEFT JOIN transactions t ON a.id = t.account_id
-        GROUP BY u.id, a.id
-        ORDER BY u.created_at DESC
-      `)
-      await pool.end()
-      
-      return res.status(200).json({
-        users: result.rows.map(u => ({
-          id: u.id,
-          email: u.email,
-          firstName: u.first_name,
-          lastName: u.last_name,
-          balance: u.balance ? parseFloat(u.balance) : 0,
-          buyingPower: u.buying_power ? parseFloat(u.buying_power) : 0,
-          transactionCount: parseInt(u.transaction_count),
-          createdAt: u.created_at
-        }))
-      })
+      try {
+        // Ensure all tables exist first
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            email VARCHAR(255) UNIQUE NOT NULL,
+            password VARCHAR(255) NOT NULL,
+            first_name VARCHAR(100),
+            last_name VARCHAR(100),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `)
+        
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS accounts (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER UNIQUE NOT NULL,
+            balance DECIMAL(15, 2) DEFAULT 50000,
+            buying_power DECIMAL(15, 2) DEFAULT 50000,
+            total_deposits DECIMAL(15, 2) DEFAULT 50000,
+            unrealized_gains DECIMAL(15, 2) DEFAULT 0,
+            margin_level DECIMAL(5, 2) DEFAULT 30,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `)
+        
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS transactions (
+            id SERIAL PRIMARY KEY,
+            account_id INTEGER NOT NULL,
+            type VARCHAR(50),
+            amount DECIMAL(15, 2),
+            description VARCHAR(255),
+            date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            balance DECIMAL(15, 2)
+          )
+        `)
+        
+        // Now query users
+        const result = await pool.query(`
+          SELECT 
+            u.id, 
+            u.email, 
+            u.first_name, 
+            u.last_name, 
+            u.created_at,
+            a.balance,
+            a.buying_power,
+            COUNT(t.id) as transaction_count
+          FROM users u
+          LEFT JOIN accounts a ON u.id = a.user_id
+          LEFT JOIN transactions t ON a.id = t.account_id
+          GROUP BY u.id, a.id
+          ORDER BY u.created_at DESC
+        `)
+        await pool.end()
+        
+        console.log('Admin users query returned:', result.rows.length, 'users')
+        
+        return res.status(200).json({
+          users: result.rows.map(u => ({
+            id: u.id,
+            email: u.email,
+            firstName: u.first_name,
+            lastName: u.last_name,
+            balance: u.balance ? parseFloat(u.balance) : 50000,
+            buyingPower: u.buying_power ? parseFloat(u.buying_power) : 50000,
+            transactionCount: parseInt(u.transaction_count) || 0,
+            createdAt: u.created_at
+          }))
+        })
+      } catch (err) {
+        await pool.end()
+        console.error('Admin users GET error:', err)
+        return res.status(500).json({
+          error: 'Failed to fetch users',
+          detail: err instanceof Error ? err.message : String(err)
+        })
+      }
     }
 
     // DELETE - Delete user and related records
