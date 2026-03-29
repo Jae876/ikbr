@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Lock, AlertCircle, Eye, EyeOff, Trash2, Edit2, Plus, X, Save, LogOut } from 'lucide-react'
+import { Lock, AlertCircle, Eye, EyeOff, Trash2, Edit2, X, Save, LogOut } from 'lucide-react'
 
 interface User {
   id: number
@@ -216,54 +216,6 @@ export default function AdminPage() {
     }
   }
 
-  const handleSeedDemoUser = async () => {
-    try {
-      setLoadingUsers(true)
-      const token = localStorage.getItem('adminToken')
-      const apiUrl = import.meta.env.VITE_API_URL || '/api'
-      const fullUrl = `${apiUrl}/admin/seed-demo`
-      console.log('Seeding demo user at URL:', fullUrl)
-      console.log('Token:', token?.substring(0, 20) + '...')
-      
-      const response = await fetch(fullUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      })
-
-      console.log('Response status:', response.status)
-      console.log('Response content-type:', response.headers.get('content-type'))
-      
-      let data
-      const contentType = response.headers.get('content-type')
-      if (contentType?.includes('application/json')) {
-        data = await response.json()
-      } else {
-        const text = await response.text()
-        console.error('Response is not JSON:', text.substring(0, 200))
-        alert(`Unexpected response format. Check console.\nGot: ${text.substring(0, 100)}`)
-        return
-      }
-
-      console.log('Seed response data:', data)
-
-      if (response.ok) {
-        alert(`Demo user ${data.message === 'Demo user already exists' ? 'already exists' : 'created successfully'}!\nEmail: demo@example.com\nPassword: Demo123!@`)
-        await new Promise(resolve => setTimeout(resolve, 500))
-        loadUsers()
-      } else {
-        alert(`Error: ${data.error || 'Failed to seed demo user'}\n${data.detail || ''}`)
-      }
-    } catch (err) {
-      console.error('Error seeding demo user:', err)
-      alert(`Failed to seed demo user: ${(err as Error)?.message || 'Unknown error'}`)
-    } finally {
-      setLoadingUsers(false)
-    }
-  }
-
   if (authenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-ibkr-dark via-ibkr-navy to-ibkr-blue py-12 px-4">
@@ -293,17 +245,7 @@ export default function AdminPage() {
 
           {/* User Management Section */}
           <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-ibkr-navy">User Management</h2>
-              <button
-                onClick={handleSeedDemoUser}
-                disabled={loadingUsers}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold text-sm disabled:opacity-50"
-              >
-                <Plus className="w-4 h-4" />
-                Seed Demo User
-              </button>
-            </div>
+            <h2 className="text-2xl font-bold text-ibkr-navy mb-6">User Management</h2>
             
             {loadingUsers ? (
               <div className="text-center py-8">
