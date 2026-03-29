@@ -43,11 +43,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ message: 'Invalid or expired token' })
     }
 
-    if (!process.env.DATABASE_URL) {
-      return res.status(500).json({ message: 'DATABASE_URL not set' })
+    const connectionString = process.env.DATABASE_URL || 
+      (process.env.PGHOST && `postgresql://${process.env.PGUSER}:${process.env.PGPASSWORD}@${process.env.PGHOST}:${process.env.PGPORT || 5432}/${process.env.PGDATABASE}?sslmode=require`)
+
+    if (!connectionString) {
+      return res.status(500).json({ message: 'Database connection not configured' })
     }
 
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+    const pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false } })
 
     // Get user data
     const userResult = await pool.query('SELECT * FROM users WHERE id = $1', [decoded.userId])

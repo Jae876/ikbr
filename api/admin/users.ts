@@ -43,11 +43,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: 'Unauthorized' })
     }
 
-    if (!process.env.DATABASE_URL) {
-      return res.status(500).json({ error: 'DATABASE_URL not set' })
+    // Support both single DATABASE_URL or individual connection vars
+    const connectionString = process.env.DATABASE_URL || 
+      (process.env.PGHOST && `postgresql://${process.env.PGUSER}:${process.env.PGPASSWORD}@${process.env.PGHOST}:${process.env.PGPORT || 5432}/${process.env.PGDATABASE}?sslmode=require`)
+
+    if (!connectionString) {
+      return res.status(500).json({ error: 'Database connection not configured' })
     }
 
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+    const pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false } })
 
     // GET all users
     if (req.method === 'GET') {

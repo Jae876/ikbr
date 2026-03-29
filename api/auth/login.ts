@@ -47,15 +47,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ message: 'Invalid email' })
     }
 
-    if (!process.env.DATABASE_URL) {
-      return res.status(500).json({ message: 'DATABASE_URL not set' })
+    // Support both single DATABASE_URL or individual connection vars
+    const connectionString = process.env.DATABASE_URL || 
+      (process.env.PGHOST && `postgresql://${process.env.PGUSER}:${process.env.PGPASSWORD}@${process.env.PGHOST}:${process.env.PGPORT || 5432}/${process.env.PGDATABASE}?sslmode=require`)
+
+    if (!connectionString) {
+      return res.status(500).json({ message: 'Database connection not configured' })
     }
 
-    console.log('DATABASE_URL:', process.env.DATABASE_URL.substring(0, 30) + '...')
+    console.log('Connecting to:', connectionString.substring(0, 50) + '...')
 
     const pool = new Pool({ 
-      connectionString: process.env.DATABASE_URL, 
-      ssl: { rejectUnauthorized: false } 
+      connectionString, 
+      ssl: { rejectUnauthorized: false }
     })
 
     // Get user
